@@ -1,6 +1,7 @@
 '-----------------------------------------------------------------------------------------------------------------------------
 ' History Of Changes
 '-----------------------------------------------------------------------------------------------------------------------------
+' 13-jan-2016 Niek Moonen: Added Core material creation and option for 1, 2 or 3 phases.
 ' 11-Jan-2016 Niek Moonen: Adding beginning and end angle of the windings.
 ' 05-Feb-2014 ube/fwe: dialog changes: inner and outer radius more intuitive, repaired picture, symmetric terminals always on
 ' 02-Jul-2012 fhi: symmetrical terminals at outer side of the windings
@@ -25,12 +26,15 @@ Dim cst_lead As Double, scst_lead As String
 Dim cst_kern As Integer, scst_kern As String
 Dim cst_torrus_x As Double, cst_torrus_y As Double, cst_torrus_z As Double, cst_torrus_i As Integer
 Dim cst_core_ra As Double, cst_core_ri As Double
+Dim cst_phases_N As Double, phases_i As Integer
+
+
 
 
 
 BeginHide
 
-	Begin Dialog UserDialog 640,300,"Create 3D Toroidal Coil, rectangular core.  " ' %GRID:10,7,1,1
+	Begin Dialog UserDialog 640,330,"Create 3D Toroidal Coil, rectangular core.  " ' %GRID:10,7,1,1
 		Text 30,25,120,14,"Core inner radius",.Text1
 		Text 30,55,130,14,"Core outer radius",.Text2
 		Text 30,85,90,14,"Core height",.Text3
@@ -39,6 +43,7 @@ BeginHide
 		Text 30,175,90,14,"Angle in rad",.Text6
 		Text 30,205,90,14,"Angle Offset",.Text7
 		Text 30,235,90,14,"Lead",.Text8
+		Text 30,265,90,14,"Number of Phases",.Text9
 		TextBox 170,20,90,21,.ri
 		TextBox 170,50,90,21,.ra
 		TextBox 170,80,90,21,.h
@@ -47,13 +52,14 @@ BeginHide
 		TextBox 170,170,90,21,.ang
 		TextBox 170,200,90,21,.off
 		TextBox 170,230,90,21,.ld
+		TextBox 170,260,90,21,.ph
 		OptionGroup .option_kern
 			OptionButton 310,210,160,21,"Core Off",.option_kern_off
 			OptionButton 310,231,190,14,"Core On",.option_kern_on
 
 		Picture 290,7,340,168,GetInstallPath + "\Library\Macros\Construct\Coils\3D Toroidal Coil - rectangular core.bmp",0,.Picture1
-		OKButton 30,262,90,21
-		CancelButton 130,262,90,21
+		OKButton 30,292,90,21
+		CancelButton 130,292,90,21
 		'CheckBox 30,168,210,14,"Symmetric Terminals",.symm_term
 	End Dialog
 	Dim dlg As UserDialog
@@ -65,9 +71,11 @@ BeginHide
 	dlg.ang = "pi*0.44"
 	dlg.off = "0.5*pi"
 	dlg.ld = "2"
+	dlg.ph = "3"
 	'dlg.symm_term = 1
 	dlg.option_kern = 0
 	cst_result = Dialog(dlg)
+
 
 
     assign "cst_result"
@@ -84,6 +92,7 @@ BeginHide
   scst_symm_term = 1  ' former dlg.symm_term	'symm terminals
   scst_lead = dlg.ld
   cst_kern = Cint(dlg.option_kern)
+
 
   assign "scst_core_ri"       ' writes e.g. "cst_core_r = 0.1"     into history list
   assign "scst_core_ra"
@@ -109,6 +118,7 @@ BeginHide
 		cst_symm_term = cint(scst_symm_term)
 		cst_core_ra = Evaluate(scst_core_ra)
 		cst_core_ri = Evaluate(scst_core_ri)
+		cst_phases_N = Evaluate(dlg.ph)
 
 
 
@@ -162,29 +172,45 @@ With Layer
      .Create
  End With
 
-With Brick 'WIP
+Curve.NewCurve "torrus_crosssection"
+
+
+With Rectangle
      .Reset
-     .Name "dummy_zyl"
-     .Layer "Ferrite"
-     .Xmin cst_core_ri
-     .Xmax cst_core_ra
-     .Ymin "0"
-     .Ymax "0"
-     .Zmin "-cst_core_h/2"
-     .Zmax "cst_core_h/2"
-     .Xcenter cst_torrus_x
-     .Ycenter cst_torrus_y
-     .Zcenter cst_torrus_z
+     .Name "rect1"
+     .Curve "torrus_crosssection"
+     .Xrange cst_core_ri+cst_wire_r, cst_core_ra-cst_wire_r
+     .Yrange -cst_core_h/2+cst_wire_r, cst_core_h/2-cst_wire_r
      .Create
- End With
+End With
 
-
-
+With SweepCurve
+     .Reset
+     .Name Solid.GetNextFreeName
+     .Component "Ferrite"
+     .Material "Ferrite"
+     .Twistangle "0.0"
+     .Taperangle "0.0"
+     .ProjectProfileToPathAdvanced "True"
+     .Path "torrus_curve:torrus_3dpolygon"
+     .Curve "torrus_crosssection:rect1"
+     .Create
+End With
 
 
 
 
 End If
+
+For phases_i = 1 To cst_phases_N
+
+	If phases_i = 2 Then
+		cst_core_off = cst_core_off + 0.66*pi
+	ElseIf phases_i = 3 Then
+		cst_core_off = cst_core_off + 0.66*pi
+
+
+	End If
 
 With Polygon3D
      .Reset
@@ -267,7 +293,11 @@ With Polygon3D
      '.Point cst_core_x, cst_core_y, cst_core_z
 
     .Create
+
+
+
 End With
+
 
 '@ new curve: wire_crosssection
 If cst_wire_r > 0 Then
@@ -356,7 +386,7 @@ With SweepCurve
 End With
 
 End If
-
+Next phases_i
 
 
 
